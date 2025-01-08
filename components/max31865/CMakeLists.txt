@@ -1,0 +1,13 @@
+idf_component_register(
+    SRC_DIRS
+        "."
+    INCLUDE_DIRS
+        "."
+    SRCS 
+        "max31865_task.cpp"
+        "max31865.cpp"
+        "spi.hpp"
+        "utility.hpp"
+    REQUIRES 
+        driver
+)
