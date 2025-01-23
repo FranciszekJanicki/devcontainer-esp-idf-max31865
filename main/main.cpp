@@ -4,7 +4,8 @@
 extern "C" {
 #endif
 
-void app_main(void) {
+void app_main(void)
+{
     MAX31865::start_task();
 }
 

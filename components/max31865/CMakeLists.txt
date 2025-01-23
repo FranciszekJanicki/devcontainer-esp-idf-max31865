@@ -6,7 +6,8 @@ idf_component_register(
     SRCS 
         "max31865_task.cpp"
         "max31865.cpp"
-        "spi.hpp"
+        "spi_device.hpp"
+        "spi_device.cpp"
         "utility.hpp"
     REQUIRES 
         driver

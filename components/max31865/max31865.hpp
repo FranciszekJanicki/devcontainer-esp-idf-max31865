@@ -1,7 +1,7 @@
 #ifndef MAX31865_HPP
 #define MAX31865_HPP
 
-#include "spi.hpp"
+#include "spi_device.hpp"
 #include <optional>
 
 namespace MAX31865 {
@@ -40,10 +40,10 @@ namespace MAX31865 {
         using Scaled = float;
         using OptionalRaw = std::optional<Raw>;
         using OptionalScaled = std::optional<Scaled>;
+        using SPIDevice = Utility::SPIDevice;
 
         MAX31865() noexcept = default;
-
-        MAX31865(gpio_num_t const chip_select, Scaled const threshold_min, Scaled const threshold_max) noexcept;
+        MAX31865(SPIDevice&& spi_device, Scaled const threshold_min, Scaled const threshold_max) noexcept;
 
         MAX31865(MAX31865 const& other) noexcept = delete;
         MAX31865(MAX31865&& other) noexcept = default;
@@ -65,9 +65,6 @@ namespace MAX31865 {
         static constexpr std::uint8_t REG_WRITE_OFFSET{0x80};
 
         void initialize(Scaled const threshold_min, Scaled const threshold_max) noexcept;
-        void initialize_gpio() noexcept;
-        void initialize_spi() noexcept;
-        void deinitialize_spi() noexcept;
         void deinitialize() noexcept;
 
         void set_config_register(std::uint8_t const config) const noexcept;
@@ -82,10 +79,9 @@ namespace MAX31865 {
         void set_vbias(bool const vbias) const noexcept;
         void start_one_shot_conversion() const noexcept;
 
-        bool initialized{false};
+        bool initialized_{false};
 
-        gpio_num_t chip_select{};
-        spi_device_handle_t spi_device{nullptr};
+        SPIDevice spi_device_{};
     };
 
 }; // namespace MAX31865

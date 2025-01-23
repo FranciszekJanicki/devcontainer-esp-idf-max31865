@@ -1,5 +1,5 @@
-#ifndef MAX31865_REGISTER_MAP_HPP
-#define MAX31865_REGISTER_MAP_HPP
+#ifndef MAX31865_REGISTERS_HPP
+#define MAX31865_REGISTERS_HPP
 
 #include <cstdint>
 
@@ -29,4 +29,4 @@ namespace MAX31865 {
 
 }; // namespace MAX31865
 
-#endif // MAX31865_REGISTER_MAP_HPP
+#endif // MAX31865_REGISTERS_HPP
