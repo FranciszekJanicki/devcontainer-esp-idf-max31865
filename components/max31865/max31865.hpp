@@ -1,6 +1,7 @@
 #ifndef MAX31865_HPP
 #define MAX31865_HPP
 
+#include "max31865_registers.hpp"
 #include "spi_device.hpp"
 #include <optional>
 
@@ -8,74 +9,103 @@ namespace MAX31865 {
 
     struct MAX31865 {
     public:
-        enum NWires : uint8_t {
-            Three = 1,
-            Two = 0,
-            Four = 0,
+        enum struct NWires : std::uint8_t {
+            THREE = 1,
+            TWO = 0,
+            FOUR = 0,
         };
 
-        enum FaultDetection : uint8_t {
-            NoAction = 0b00,
-            AutoDelay = 0b01,
-            ManualDelayCycle1 = 0b10,
-            ManualDelayCycle2 = 0b11,
+        enum struct FaultDetect : std::uint8_t {
+            NO_ACTION = 0b00,
+            AUTO_DELAY = 0b01,
+            MANUAL_DELAY_CYCLE1 = 0b10,
+            MANUAL_DELAY_CYCLE2 = 0b11,
         };
 
-        enum Filter : uint8_t {
-            Hz50 = 1,
-            Hz60 = 0,
+        enum Filter : std::uint8_t {
+            HZ50 = 1,
+            HZ60 = 0,
         };
 
-        enum Error : uint8_t {
-            NoError = 0,
-            Voltage = 2,
-            RTDInLow,
-            RefLow,
-            RefHigh,
-            RTDLow,
-            RTDHigh,
+        enum struct Error : std::uint8_t {
+            NO_ERROR = 0,
+            VOLTAGE = 2,
+            RTD_IN_LOW,
+            REF_LOW,
+            REF_HIGH,
+            RTD_LOW,
+            RTD_HIGH,
         };
 
-        using Raw = std::uint16_t;
-        using Scaled = float;
-        using OptionalRaw = std::optional<Raw>;
-        using OptionalScaled = std::optional<Scaled>;
+        enum struct FaultClear : std::uint8_t {
+            AUTO = 1U,
+            MANUAL = 0U,
+        };
+
+        enum struct ConvMode : std::uint8_t {
+            AUTO = 1U,
+            ONESHOT = 0U,
+        };
+
         using SPIDevice = Utility::SPIDevice;
 
         MAX31865() noexcept = default;
-        MAX31865(SPIDevice&& spi_device, Scaled const threshold_min, Scaled const threshold_max) noexcept;
+        MAX31865(SPIDevice&& spi_device,
+                 float const threshold_min,
+                 float const threshold_max,
+                 NWires const nwires,
+                 FaultDetect const fault_detect,
+                 FaultClear const fault_clear,
+                 Filter const filter,
+                 ConvMode const conv_mode)
+        noexcept;
 
-        MAX31865(MAX31865 const& other) noexcept = delete;
+        MAX31865(MAX31865 const& other) = delete;
         MAX31865(MAX31865&& other) noexcept = default;
 
-        MAX31865& operator=(MAX31865 const& other) noexcept = delete;
+        MAX31865& operator=(MAX31865 const& other) = delete;
         MAX31865& operator=(MAX31865&& other) noexcept = default;
 
         ~MAX31865() noexcept;
 
-        OptionalRaw get_temperature_raw() noexcept;
-        OptionalScaled get_temperature_scaled() noexcept;
+        std::optional<std::int16_t> get_temperature_raw() noexcept;
+        std::optional<float> get_temperature_scaled() noexcept;
 
     private:
-        static Scaled raw_to_scaled(Raw const raw) noexcept;
-        static Raw scaled_to_raw(Scaled const scaled) noexcept;
+        static float raw_to_scaled(std::int16_t const raw) noexcept;
+        static std::int16_t scaled_to_raw(float const scaled) noexcept;
 
-        static constexpr Scaled RTD_CONVERT_SLOPE{30.904F};
-        static constexpr Scaled RTD_CONVERT_INTERCEPT{8234.257F};
+        static constexpr float RTD_CONVERT_SLOPE{30.904F};
+        static constexpr float RTD_CONVERT_INTERCEPT{8234.257F};
         static constexpr std::uint8_t REG_WRITE_OFFSET{0x80};
 
-        void initialize(Scaled const threshold_min, Scaled const threshold_max) noexcept;
+        void initialize(float const threshold_min,
+                        float const threshold_max,
+                        NWires const nwires,
+                        FaultDetect const fault_detect,
+                        FaultClear const fault_clear,
+                        Filter const filter,
+                        ConvMode const conv_mode) noexcept;
         void deinitialize() noexcept;
 
-        void set_config_register(std::uint8_t const config) const noexcept;
-        std::uint8_t get_config_register() const noexcept;
+        void set_config_register(CONFIG const config) const noexcept;
+        CONFIG get_config_register() const noexcept;
 
-        void set_high_fault_registers(std::uint16_t const high_fault) const noexcept;
-        void set_low_fault_registers(std::uint16_t const low_fault) const noexcept;
+        void set_high_fault_registers(HIGH_FAULT const high_fault) const noexcept;
+        HIGH_FAULT get_high_fault_registers() const noexcept;
 
-        std::uint16_t get_rtd_registers() const noexcept;
+        void set_low_fault_registers(LOW_FAULT const low_fault) const noexcept;
+        LOW_FAULT get_low_fault_registers() const noexcept;
 
-        void set_config() const noexcept;
+        RTD get_rtd_registers() const noexcept;
+
+        void set_config(NWires const nwires,
+                        FaultDetect const fault_detect,
+                        FaultClear const fault_clear,
+                        Filter const filter,
+                        ConvMode const conv_mode) const noexcept;
+        void set_high_fault(std::int16_t const threshold_max) const noexcept;
+        void set_low_fault(std::int16_t const threshold_min) const noexcept;
         void set_vbias(bool const vbias) const noexcept;
         void start_one_shot_conversion() const noexcept;
 

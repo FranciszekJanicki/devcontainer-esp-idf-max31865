@@ -6,7 +6,7 @@ extern "C" {
 
 void app_main(void)
 {
-    MAX31865::start_task();
+    start_task();
 }
 
 #ifdef __cplusplus

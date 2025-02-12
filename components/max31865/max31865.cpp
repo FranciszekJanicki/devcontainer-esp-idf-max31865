@@ -3,20 +3,23 @@
 #include "spi_device.hpp"
 #include <cmath>
 #include <optional>
+#include <utility>
 
-using RA = MAX31865::RA;
-using CONFIG = MAX31865::CONFIG;
-using Raw = MAX31865::MAX31865::Raw;
-using Scaled = MAX31865::MAX31865::Scaled;
-using OptionalRaw = MAX31865::MAX31865::OptionalRaw;
-using OptionalScaled = MAX31865::MAX31865::OptionalScaled;
+using SPIDevice = Utility::SPIDevice;
 
 namespace MAX31865 {
 
-    MAX31865::MAX31865(SPIDevice&& spi_device, Scaled const threshold_min, Scaled const threshold_max) noexcept :
+    MAX31865::MAX31865(SPIDevice&& spi_device,
+                       float const threshold_min,
+                       float const threshold_max,
+                       NWires const nwires,
+                       FaultDetect const fault_detect,
+                       FaultClear const fault_clear,
+                       Filter const filter,
+                       ConvMode const conv_mode) noexcept :
         spi_device_{std::forward<SPIDevice>(spi_device)}
     {
-        this->initialize(threshold_min, threshold_max);
+        this->initialize(threshold_min, threshold_max, nwires, fault_detect, fault_clear, filter, conv_mode);
     }
 
     MAX31865::~MAX31865() noexcept
@@ -24,53 +27,61 @@ namespace MAX31865 {
         this->deinitialize();
     }
 
-    OptionalRaw MAX31865::get_temperature_raw() noexcept
+    std::optional<std::int16_t> MAX31865::get_temperature_raw() noexcept
     {
         if (!this->initialized_) {
-            return OptionalRaw{std::nullopt};
+            return std::optional<std::int16_t>{std::nullopt};
         }
 
         this->set_vbias(true);
         vTaskDelay(pdMS_TO_TICKS(10));
 
-        this->start_one_shot_conversion();
-        vTaskDelay(pdMS_TO_TICKS(50));
-
-        if (this->spi_device_.read_byte(RA::CONFIG_REG) & (1U << CONFIG::ONESHOT_BIT)) {
-            return OptionalRaw{std::nullopt};
+        if (this->get_config_register().conv_mode == std::to_underlying(ConvMode::ONESHOT)) {
+            this->start_one_shot_conversion();
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
 
-        auto const rtd{this->get_rtd_registers()};
+        if (this->get_config_register().oneshot) {
+            return std::optional<std::int16_t>{std::nullopt};
+        }
+
+        auto const rtd{std::bit_cast<std::int16_t>(this->get_rtd_registers())};
 
         this->set_vbias(false);
 
         if (rtd & 1U) {
-            return OptionalRaw{std::nullopt};
+            return std::optional<std::int16_t>{std::nullopt};
         }
 
-        return OptionalRaw{rtd >> 1U};
+        return std::optional<std::int16_t>{rtd >> 1U};
     }
 
-    OptionalScaled MAX31865::get_temperature_scaled() noexcept
+    std::optional<float> MAX31865::get_temperature_scaled() noexcept
     {
         return this->get_temperature_raw().transform(&raw_to_scaled);
     }
 
-    Scaled MAX31865::raw_to_scaled(Raw const raw) noexcept
+    float MAX31865::raw_to_scaled(std::int16_t const raw) noexcept
     {
         return (raw - RTD_CONVERT_INTERCEPT) / RTD_CONVERT_SLOPE;
     }
 
-    Raw MAX31865::scaled_to_raw(Scaled const scaled) noexcept
+    std::int16_t MAX31865::scaled_to_raw(float const scaled) noexcept
     {
         return scaled * RTD_CONVERT_SLOPE + RTD_CONVERT_INTERCEPT;
     }
 
-    void MAX31865::initialize(Scaled const threshold_min, Scaled const threshold_max) noexcept
+    void MAX31865::initialize(float const threshold_min,
+                              float const threshold_max,
+                              NWires const nwires,
+                              FaultDetect const fault_detect,
+                              FaultClear const fault_clear,
+                              Filter const filter,
+                              ConvMode const conv_mode) noexcept
     {
-        this->set_config();
-        this->set_high_fault_registers(scaled_to_raw(threshold_max));
-        this->set_low_fault_registers(scaled_to_raw(threshold_min));
+        this->set_config(nwires, fault_detect, fault_clear, filter, conv_mode);
+        this->set_high_fault(threshold_max);
+        this->set_low_fault(threshold_min);
         this->initialized_ = true;
     }
 
@@ -81,55 +92,85 @@ namespace MAX31865 {
 
     void MAX31865::set_vbias(bool const vbias) const noexcept
     {
-        auto cfg = this->get_config_register();
-        vbias ? cfg |= 1U << CONFIG::VBIAS_BIT : cfg &= ~(1U << CONFIG::VBIAS_BIT);
-        cfg |= 1U << CONFIG::FAULTSTATUS_BIT;
-        cfg |= 0U << CONFIG::FAULTDETECTION_BIT_0;
-        cfg |= 0U << CONFIG::FAULTDETECTION_BIT_1;
-        cfg |= 0U << CONFIG::ONESHOT_BIT;
+        auto cfg{this->get_config_register()};
+        cfg.vbias = vbias;
+        cfg.fault_clear = 0U;
+        cfg.fault_detect = 0U;
+        cfg.oneshot = 0U;
         this->set_config_register(cfg);
     }
 
-    void MAX31865::set_config_register(std::uint8_t const config) const noexcept
+    void MAX31865::set_config_register(CONFIG const config) const noexcept
     {
-        this->spi_device_.write_byte(RA::CONFIG_REG | REG_WRITE_OFFSET, config);
+        this->spi_device_.write_byte(std::to_underlying(RA::CONFIG) | REG_WRITE_OFFSET,
+                                     std::bit_cast<std::uint8_t>(config));
     }
 
-    std::uint8_t MAX31865::get_config_register() const noexcept
+    CONFIG MAX31865::get_config_register() const noexcept
     {
-        return this->spi_device_.read_byte(RA::CONFIG_REG & (REG_WRITE_OFFSET - 1U));
+        return std::bit_cast<CONFIG>(
+            this->spi_device_.read_byte(std::to_underlying(RA::CONFIG) & (REG_WRITE_OFFSET - 1U)));
     }
 
-    void MAX31865::set_config() const noexcept
+    void MAX31865::set_config(NWires const nwires,
+                              FaultDetect const fault_detect,
+                              FaultClear const fault_clear,
+                              Filter const filter,
+                              ConvMode const conv_mode) const noexcept
     {
-        this->set_config_register(NWires::Four << CONFIG::NWIRES_BIT | Filter::Hz60 << CONFIG::MAINSFILTER_BIT |
-                                  0U << CONFIG::FAULTDETECTION_BIT_0 | 0U << CONFIG::FAULTDETECTION_BIT_1 |
-                                  0U << CONFIG::CONVERSIONMODE_BIT | 0U << CONFIG::VBIAS_BIT);
+        this->set_config_register(CONFIG{.vbias = 0U,
+                                         .conv_mode = std::to_underlying(conv_mode),
+                                         .oneshot = 0U,
+                                         .nwires = std::to_underlying(nwires),
+                                         .fault_detect = std::to_underlying(fault_detect),
+                                         .fault_clear = std::to_underlying(fault_clear),
+                                         .mainsfilter = std::to_underlying(filter)});
     }
 
-    void MAX31865::set_high_fault_registers(std::uint16_t const high_fault) const noexcept
+    void MAX31865::set_high_fault(std::int16_t const threshold_max) const noexcept
     {
-        this->spi_device_.write_bytes(RA::HIGH_FAULT_REG_H | REG_WRITE_OFFSET,
-                                      std::array<std::uint8_t, 2>{static_cast<std::uint8_t>((high_fault << 1) >> 8),
-                                                                  static_cast<std::uint8_t>(high_fault << 1)});
+        this->set_high_fault_registers(std::bit_cast<HIGH_FAULT>(scaled_to_raw(threshold_max)));
     }
 
-    void MAX31865::set_low_fault_registers(std::uint16_t const low_fault) const noexcept
+    void MAX31865::set_low_fault(std::int16_t const threshold_min) const noexcept
     {
-        this->spi_device_.write_bytes(RA::LOW_FAULT_REG_H | REG_WRITE_OFFSET,
-                                      std::array<std::uint8_t, 2>{static_cast<std::uint8_t>((low_fault << 1) >> 8),
-                                                                  static_cast<std::uint8_t>(low_fault << 1)});
+        this->set_low_fault_registers(std::bit_cast<LOW_FAULT>(scaled_to_raw(threshold_min)));
     }
 
-    std::uint16_t MAX31865::get_rtd_registers() const noexcept
+    void MAX31865::set_high_fault_registers(HIGH_FAULT const high_fault) const noexcept
     {
-        auto const buffer{this->spi_device_.read_bytes<2>(RA::RTD_REG_H & (REG_WRITE_OFFSET - 1U))};
-        return (static_cast<std::uint16_t>(buffer[0]) << 8U) | static_cast<std::uint16_t>(buffer[1]);
+        this->spi_device_.write_word(std::to_underlying(RA::HIGH_FAULT_H) | REG_WRITE_OFFSET,
+                                     std::bit_cast<std::uint16_t>(high_fault));
+    }
+
+    HIGH_FAULT MAX31865::get_high_fault_registers() const noexcept
+    {
+        return std::bit_cast<HIGH_FAULT>(
+            this->spi_device_.read_word(std::to_underlying(RA::HIGH_FAULT_H) & (REG_WRITE_OFFSET - 1U)));
+    }
+
+    void MAX31865::set_low_fault_registers(LOW_FAULT const low_fault) const noexcept
+    {
+        this->spi_device_.write_word(std::to_underlying(RA::LOW_FAULT_H) | REG_WRITE_OFFSET,
+                                     std::bit_cast<std::uint16_t>(low_fault));
+    }
+
+    LOW_FAULT MAX31865::get_low_fault_registers() const noexcept
+    {
+        return std::bit_cast<LOW_FAULT>(
+            this->spi_device_.read_word(std::to_underlying(RA::LOW_FAULT_H) & (REG_WRITE_OFFSET - 1U)));
+    }
+
+    RTD MAX31865::get_rtd_registers() const noexcept
+    {
+        return std::bit_cast<RTD>(this->spi_device_.read_word(std::to_underlying(RA::RTD_H) & (REG_WRITE_OFFSET - 1U)));
     }
 
     void MAX31865::start_one_shot_conversion() const noexcept
     {
-        this->set_config_register(this->get_config_register() | (1U << CONFIG::ONESHOT_BIT));
+        auto cfg{this->get_config_register()};
+        cfg.oneshot = 1U;
+        this->set_config_register(cfg);
     }
 
 }; // namespace MAX31865

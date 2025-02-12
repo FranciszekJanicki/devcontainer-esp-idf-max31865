@@ -12,101 +12,100 @@ namespace Utility {
         this->initialize();
     }
 
-    auto SPIDevice::transmit_dword(DWord const transmit_data) const noexcept -> void
+    void SPIDevice::transmit_dword(std::uint32_t const dword) const noexcept
     {
-        this->transmit_dwords(DWords<1UL>{transmit_data});
+        this->transmit_dwords(std::array<std::uint32_t, 1UL>{dword});
     }
 
-    auto SPIDevice::transmit_word(Word const transmit_data) const noexcept -> void
+    void SPIDevice::transmit_word(std::uint16_t const word) const noexcept
     {
-        this->transmit_words(Words<1UL>{transmit_data});
+        this->transmit_words(std::array<std::uint16_t, 1UL>{word});
     }
 
-    auto SPIDevice::transmit_byte(Byte const transmit_data) const noexcept -> void
+    void SPIDevice::transmit_byte(std::uint8_t const byte) const noexcept
     {
-        this->transmit_bytes(Bytes<1UL>{transmit_data});
+        this->transmit_bytes(std::array<std::uint8_t, 1UL>{byte});
     }
 
-    auto SPIDevice::receive_dword() const noexcept -> DWord
+    std::uint32_t SPIDevice::receive_dword() const noexcept
     {
         return this->receive_dwords<1UL>()[0];
     }
 
-    auto SPIDevice::receive_word() const noexcept -> Word
+    std::uint16_t SPIDevice::receive_word() const noexcept
     {
         return this->receive_words<1UL>()[0];
     }
 
-    auto SPIDevice::receive_byte() const noexcept -> Byte
+    std::uint8_t SPIDevice::receive_byte() const noexcept
     {
         return this->receive_bytes<1UL>()[0];
     }
 
-    auto SPIDevice::read_dword(std::uint8_t const reg_address) const noexcept -> DWord
+    std::uint32_t SPIDevice::read_dword(std::uint8_t const reg_address) const noexcept
     {
         return this->read_dwords<1UL>(reg_address)[0];
     }
 
-    auto SPIDevice::read_word(std::uint8_t const reg_address) const noexcept -> Word
+    std::uint16_t SPIDevice::read_word(std::uint8_t const reg_address) const noexcept
     {
         return this->read_words<1UL>(reg_address)[0];
     }
 
-    auto SPIDevice::read_byte(std::uint8_t const reg_address) const noexcept -> Byte
+    std::uint8_t SPIDevice::read_byte(std::uint8_t const reg_address) const noexcept
     {
         return this->read_bytes<1UL>(reg_address)[0];
     }
 
-    auto SPIDevice::read_bits(std::uint8_t const reg_address,
-                              std::uint8_t const read_position,
-                              std::size_t const read_size) const noexcept -> Byte
+    std::uint8_t SPIDevice::read_bits(std::uint8_t const reg_address,
+                                      std::uint8_t const position,
+                                      std::size_t const size) const noexcept
     {
-        return get_bits(this->read_byte(reg_address), read_size, read_position);
+        return get_bits(this->read_byte(reg_address), size, position);
     }
 
-    auto SPIDevice::read_bit(std::uint8_t const reg_address, std::uint8_t const read_position) const noexcept -> Bit
+    bool SPIDevice::read_bit(std::uint8_t const reg_address, std::uint8_t const position) const noexcept
     {
-        return get_bit(this->read_byte(reg_address), read_position);
+        return get_bit(this->read_byte(reg_address), position);
     }
 
-    auto SPIDevice::write_dword(std::uint8_t const reg_address, DWord const write_data) const noexcept -> void
+    void SPIDevice::write_dword(std::uint8_t const reg_address, std::uint32_t const dword) const noexcept
     {
-        this->write_dwords(reg_address, DWords<1UL>{write_data});
+        this->write_dwords(reg_address, std::array<std::uint32_t, 1UL>{dword});
     }
 
-    auto SPIDevice::write_word(std::uint8_t const reg_address, Word const write_data) const noexcept -> void
+    void SPIDevice::write_word(std::uint8_t const reg_address, std::uint16_t const word) const noexcept
     {
-        this->write_words(reg_address, Words<1UL>{write_data});
+        this->write_words(reg_address, std::array<std::uint16_t, 1UL>{word});
     }
 
-    auto SPIDevice::write_byte(std::uint8_t const reg_address, Byte const write_data) const noexcept -> void
+    void SPIDevice::write_byte(std::uint8_t const reg_address, std::uint8_t const byte) const noexcept
     {
-        this->write_bytes(reg_address, Bytes<1UL>{write_data});
+        this->write_bytes(reg_address, std::array<std::uint8_t, 1UL>{byte});
     }
 
-    auto SPIDevice::write_bits(std::uint8_t const reg_address,
-                               Byte const write_data,
-                               std::uint8_t const write_position,
-                               std::size_t const write_size) const noexcept -> void
+    void SPIDevice::write_bits(std::uint8_t const reg_address,
+                               std::uint8_t const bits,
+                               std::uint8_t const position,
+                               std::size_t const size) const noexcept
     {
-        Byte write{this->read_byte(reg_address)};
-        set_bits(write, write_data, write_size, write_position);
+        std::uint8_t write{this->read_byte(reg_address)};
+        set_bits(write, bits, size, position);
         this->write_byte(reg_address, write);
     }
 
-    auto SPIDevice::write_bit(std::uint8_t const reg_address,
-                              Bit const write_data,
-                              std::uint8_t const write_position) const noexcept -> void
+    void
+    SPIDevice::write_bit(std::uint8_t const reg_address, bool const bit, std::uint8_t const position) const noexcept
     {
-        Byte write{this->read_byte(reg_address)};
-        set_bit(write, write_data, write_position);
+        std::uint8_t write{this->read_byte(reg_address)};
+        set_bit(write, bit, position);
         this->write_byte(reg_address, write);
     }
 
     auto SPIDevice::initialize() noexcept -> void
     {
         if (this->spi_device_ != nullptr) {
-            gpio_set_level(this->chip_select_, 1);
+            gpio_set_level(this->chip_select_, 1U);
             this->initialized_ = true;
         }
     }
@@ -114,7 +113,7 @@ namespace Utility {
     auto SPIDevice::deinitialize() noexcept -> void
     {
         if (this->spi_device_ != nullptr) {
-            gpio_set_level(this->chip_select_, 0);
+            gpio_set_level(this->chip_select_, 0U);
             this->initialized_ = false;
         }
     }

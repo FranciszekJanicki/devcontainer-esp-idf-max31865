@@ -4,7 +4,10 @@
 #include <array>
 #include <bit>
 #include <bitset>
+#include <concepts>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 
 namespace Utility {
 
@@ -22,11 +25,28 @@ namespace Utility {
     template <std::size_t SIZE>
     using DWords = std::array<DWord, SIZE>;
 
-    template <std::size_t BITS>
-    [[nodiscard]] constexpr auto bits_to_bytes(Bits<BITS> const& bits) noexcept -> Bytes<BITS / 8>
+    template <typename Value, std::size_t SIZE>
+    inline std::array<std::uint8_t, SIZE * sizeof(Value)>
+    values_to_bytes(std::array<Value, SIZE> const& values) noexcept
     {
-        static_assert(BITS % 8 == 0);
-        Bytes<BITS / 8> bytes{};
+        std::array<std::uint8_t, SIZE * sizeof(Value)> bytes{};
+        std::memcpy(bytes.data(), values.data(), SIZE * sizeof(Value));
+        return bytes;
+    }
+
+    template <typename Value, std::size_t SIZE>
+    inline std::array<Value, SIZE> bytes_to_values(std::array<std::uint8_t, SIZE * sizeof(Value)> const& bytes) noexcept
+    {
+        std::array<Value, SIZE> values{};
+        std::memcpy(values.data(), bytes.data(), SIZE * sizeof(Value));
+        return values;
+    }
+
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, SIZE / 8> bits_to_bytes(std::bitset<SIZE> const& bits) noexcept
+    {
+        static_assert(SIZE % 8 == 0);
+        std::array<std::uint8_t, SIZE / 8> bytes{};
         for (std::size_t i{}; i < bytes.size(); ++i) {
             for (std::size_t j{}; j < 8; ++j) {
                 if (bits[i * 8 + j]) {
@@ -37,10 +57,11 @@ namespace Utility {
         return bytes;
     }
 
-    template <std::size_t BYTES>
-    [[nodiscard]] constexpr auto bytes_to_bits(Bytes<BYTES> const& bytes) noexcept -> Bits<8 * BYTES>
+    template <std::size_t SIZE>
+    inline std::bitset<8 * SIZE> bytes_to_bits(std::array<std::uint8_t, SIZE> const& bytes) noexcept
+
     {
-        Bits<8 * BYTES> bits{};
+        std::bitset<8 * SIZE> bits{};
         for (std::size_t i{}; i < bytes.size(); ++i) {
             for (std::size_t j{}; j < 8; ++j) {
                 bits[i * 8 + j] = (bytes[i] & (1 << j)) != 0;
@@ -49,138 +70,168 @@ namespace Utility {
         return bits;
     }
 
-    template <std::size_t BYTES>
-    [[nodiscard]] constexpr auto bytes_to_words(Bytes<BYTES> const& bytes) noexcept -> Words<BYTES / 2>
+    template <std::size_t SIZE>
+    inline std::array<std::uint16_t, SIZE / 2>
+    bytes_in_big_endian_to_words(std::array<std::uint8_t, SIZE> const& bytes) noexcept
     {
-        static_assert(BYTES % 2 == 0);
-        Words<BYTES / 2> words{};
+        static_assert(SIZE % 2 == 0);
+        std::array<std::uint16_t, SIZE / 2> words{};
         for (std::size_t i{}; i < words.size(); ++i) {
-            words[i] = static_cast<Word>(bytes[2 * i] << 8) | static_cast<Word>(bytes[2 * i + 1]);
+            words[i] = static_cast<std::uint16_t>(bytes[2 * i] << 8) | static_cast<std::uint16_t>(bytes[2 * i + 1]);
         }
         return words;
     }
 
-    template <std::size_t WORDS>
-    [[nodiscard]] constexpr auto words_to_bytes(Words<WORDS> const& words) noexcept -> Bytes<2 * WORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint16_t, SIZE / 2>
+    bytes_in_little_endian_to_words(std::array<std::uint8_t, SIZE> const& bytes) noexcept
     {
-        Bytes<2 * WORDS> bytes{};
+        static_assert(SIZE % 2 == 0);
+        std::array<std::uint16_t, SIZE / 2> words{};
         for (std::size_t i{}; i < words.size(); ++i) {
-            bytes[2 * i] = static_cast<Byte>(words[i] >> 8);
-            bytes[2 * i + 1] = static_cast<Byte>(words[i]);
+            words[i] = static_cast<std::uint16_t>(bytes[2 * i]) | static_cast<std::uint16_t>(bytes[2 * i + 1] << 8);
+        }
+        return words;
+    }
+
+    template <std::size_t SIZE>
+    inline std::array<std::uint16_t, SIZE / 2> bytes_to_words(std::array<std::uint8_t, SIZE> const& bytes,
+                                                              std::endian const endian = std::endian::big) noexcept
+    {
+        return endian == std::endian::little ? bytes_in_little_endian_to_words(bytes)
+                                             : bytes_in_big_endian_to_words(bytes);
+    }
+
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 2 * SIZE>
+    words_to_big_endian_bytes(std::array<std::uint16_t, SIZE> const& words) noexcept
+    {
+        std::array<std::uint8_t, 2 * SIZE> bytes{};
+        for (std::size_t i{}; i < words.size(); ++i) {
+            bytes[2 * i] = static_cast<std::uint8_t>(words[i] >> 8);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(words[i]);
         }
         return bytes;
     }
 
-    template <std::size_t WORDS>
-    [[nodiscard]] constexpr auto words_to_dwords(Words<WORDS> const& words) noexcept -> DWords<WORDS / 2>
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 2 * SIZE>
+    words_to_little_endian_bytes(std::array<std::uint16_t, SIZE> const& words) noexcept
     {
-        static_assert(WORDS % 2 == 0);
+        std::array<std::uint8_t, 2 * SIZE> bytes{};
+        for (std::size_t i{}; i < words.size(); ++i) {
+            bytes[2 * i] = static_cast<std::uint8_t>(words[i]);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(words[i] >> 8);
+        }
+        return bytes;
+    }
 
-        DWords<WORDS / 2> dwords{};
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 2 * SIZE> words_to_bytes(std::array<std::uint16_t, SIZE> const& words,
+                                                             std::endian const endian = std::endian::big) noexcept
+    {
+        return endian == std::endian::little ? words_to_little_endian_bytes(words) : words_to_big_endian_bytes(words);
+    }
+
+    template <std::size_t SIZE>
+    inline std::array<std::uint32_t, SIZE / 4>
+    bytes_in_big_endian_to_dwords(std::array<std::uint8_t, SIZE> const& bytes) noexcept
+    {
+        static_assert(SIZE % 4 == 0);
+        std::array<std::uint32_t, SIZE / 4> dwords{};
         for (std::size_t i{}; i < dwords.size(); ++i) {
-            dwords[i] = static_cast<DWord>(words[2 * i] << 16) | static_cast<DWord>(words[2 * i + 1]);
+            dwords[i] =
+                static_cast<std::uint32_t>(bytes[2 * i] << 24) | static_cast<std::uint32_t>(bytes[2 * i + 1] << 16) |
+                static_cast<std::uint32_t>(bytes[2 * i + 2] << 8) | static_cast<std::uint32_t>(bytes[2 * i + 3]);
         }
         return dwords;
     }
 
-    template <std::size_t DWORDS>
-    [[nodiscard]] constexpr auto dwords_to_words(DWords<DWORDS> const& dwords) noexcept -> Words<2 * DWORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint32_t, SIZE / 4>
+    bytes_in_little_endian_to_dwords(std::array<std::uint8_t, SIZE> const& bytes) noexcept
     {
-        Words<2 * DWORDS> words{};
-        for (std::size_t i{}; i < words.size(); ++i) {
-            words[2 * i] = static_cast<Word>(dwords[i] >> 16);
-            words[2 * i + 1] = static_cast<Word>(dwords[i]);
+        static_assert(SIZE % 4 == 0);
+        std::array<std::uint32_t, SIZE / 4> dwords{};
+        for (std::size_t i{}; i < dwords.size(); ++i) {
+            dwords[i] = static_cast<std::uint32_t>(bytes[2 * i]) | static_cast<std::uint32_t>(bytes[2 * i + 1] << 8) |
+                        static_cast<std::uint32_t>(bytes[2 * i + 2] << 16) |
+                        static_cast<std::uint32_t>(bytes[2 * i + 3] << 24);
         }
-        return words;
+        return dwords;
     }
 
-    template <std::size_t WORDS>
-    [[nodiscard]] constexpr auto words_to_bits(Words<WORDS> const& words) noexcept -> Bits<16 * WORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint32_t, SIZE / 4> bytes_to_dwords(std::array<std::uint8_t, SIZE> const& bytes,
+                                                               std::endian const endian = std::endian::big) noexcept
     {
-        return bytes_to_bits(words_to_bytes(words));
+        return endian == std::endian::little ? bytes_in_little_endian_to_dwords(bytes)
+                                             : bytes_in_big_endian_to_dwords(bytes);
     }
 
-    template <std::size_t DWORDS>
-    [[nodiscard]] constexpr auto dwords_to_bits(DWords<DWORDS> const& dwords) noexcept -> Bits<32 * DWORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 4 * SIZE>
+    dwords_to_bytes_in_big_endian(std::array<std::uint32_t, SIZE> const& dwords) noexcept
     {
-        return words_to_bits(dwords_to_words(dwords));
-    }
-
-    template <std::size_t DWORDS>
-    [[nodiscard]] constexpr auto dwords_to_bytes(DWords<DWORDS> const& dwords) noexcept -> Bytes<4 * DWORDS>
-    {
-        return words_to_bytes(dwords_to_words(dwords));
-    }
-
-    template <std::size_t BITS>
-    [[nodiscard]] constexpr auto bits_to_words(Bits<BITS> const& bits) noexcept -> Words<BITS / 16>
-    {
-        return bytes_to_words(bits_to_bytes(bits));
-    }
-
-    template <std::size_t BITS>
-    [[nodiscard]] constexpr auto bits_to_dwords(Bits<BITS> const& bits) noexcept -> DWords<BITS / 32>
-    {
-        return words_to_dwords(bits_to_words(bits));
-    }
-
-    template <std::size_t BYTES>
-    [[nodiscard]] constexpr auto bytes_to_dwords(Bytes<BYTES> const& bytes) noexcept -> DWords<BYTES / 4>
-    {
-        return words_to_dwords(bytes_to_words(bytes));
-    }
-
-    template <std::size_t BYTES>
-    [[nodiscard]] constexpr auto endian_swap(Bytes<BYTES> const& bytes) noexcept -> Bytes<BYTES>
-    {
-        Bytes<BYTES> result{};
-        for (auto& byte : result) {
-            byte = std::byteswap(byte);
+        std::array<std::uint8_t, 4 * SIZE> bytes{};
+        for (std::size_t i{}; i < dwords.size(); ++i) {
+            bytes[2 * i] = static_cast<std::uint8_t>(dwords[i] >> 24);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(dwords[i] >> 16);
+            bytes[2 * i + 2] = static_cast<std::uint8_t>(dwords[i] >> 8);
+            bytes[2 * i + 3] = static_cast<std::uint8_t>(dwords[i]);
         }
-        return result;
+        return bytes;
     }
 
-    template <std::size_t WORDS>
-    [[nodiscard]] constexpr auto endian_swap(Words<WORDS> const& words) noexcept -> Words<WORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 4 * SIZE>
+    dwords_to_bytes_in_little_endian(std::array<std::uint32_t, SIZE> const& dwords) noexcept
     {
-        return bytes_to_words(endian_swap(words_to_bytes(words)));
+        std::array<std::uint8_t, 4 * SIZE> bytes{};
+        for (std::size_t i{}; i < dwords.size(); ++i) {
+            bytes[2 * i] = static_cast<std::uint8_t>(dwords[i]);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(dwords[i] >> 8);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(dwords[i] >> 16);
+            bytes[2 * i + 1] = static_cast<std::uint8_t>(dwords[i] >> 24);
+        }
+        return bytes;
     }
 
-    template <std::size_t DWORDS>
-    [[nodiscard]] constexpr auto endian_swap(DWords<DWORDS> const& dwords) noexcept -> DWords<DWORDS>
+    template <std::size_t SIZE>
+    inline std::array<std::uint8_t, 4 * SIZE> dwords_to_bytes(std::array<std::uint32_t, SIZE> const& dwords,
+                                                              std::endian const endian = std::endian::big) noexcept
     {
-        return bytes_to_dwords(endian_swap(dwords_to_bytes(dwords)));
+        return endian == std::endian::little ? dwords_to_bytes_in_little_endian(dwords)
+                                             : dwords_to_bytes_in_big_endian(dwords);
     }
 
-    [[nodiscard]] constexpr auto set_bits(Byte& byte,
-                                          Byte const write_data,
-                                          std::size_t const write_size,
-                                          std::uint8_t const write_position) noexcept -> void
+    inline void set_bits(std::uint8_t& byte,
+                         std::uint8_t const write_data,
+                         std::size_t const size,
+                         std::uint8_t const position) noexcept
     {
-        Byte mask = ((1U << write_size) - 1) << (write_position - write_size + 1);
-        Byte temp = (write_data << (write_position - write_size + 1)) & mask;
+        std::uint8_t mask = ((1U << size) - 1) << (position - size + 1);
+        std::uint8_t temp = (write_data << (position - size + 1)) & mask;
         byte &= ~mask;
         byte |= temp;
     }
 
-    [[nodiscard]] constexpr auto set_bit(Byte& byte, Bit const write_data, std::uint8_t const write_position) noexcept
-        -> void
+    inline void set_bit(std::uint8_t& byte, bool const write_data, std::uint8_t const position) noexcept
     {
-        write_data ? (byte |= (1U << write_position)) : (byte &= ~(1U << write_position));
+        write_data ? (byte |= (1U << position)) : (byte &= ~(1U << position));
     }
 
-    [[nodiscard]] constexpr auto
-    get_bits(Byte byte, std::size_t const read_size, std::uint8_t const read_position) noexcept -> Byte
+    inline std::uint8_t get_bits(std::uint8_t byte, std::size_t const size, std::uint8_t const position) noexcept
     {
-        Byte mask = ((1U << read_size) - 1) << (read_position - read_size + 1);
+        std::uint8_t mask = ((1U << size) - 1) << (position - size + 1);
         byte &= mask;
-        byte >>= (read_position - read_size + 1);
+        byte >>= (position - size + 1);
         return byte;
     }
 
-    [[nodiscard]] constexpr auto get_bit(Byte byte, std::uint8_t const read_position) noexcept -> Bit
+    inline bool get_bit(std::uint8_t byte, std::uint8_t const position) noexcept
     {
-        return (byte & (1U << read_position)) ? 1 : 0;
+        return (byte & (1U << position)) ? true : false;
     }
 
 }; // namespace Utility
